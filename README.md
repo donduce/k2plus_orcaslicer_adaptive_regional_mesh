@@ -1,0 +1,180 @@
+# W12 Regional Leveling for Creality K2 / K2 Plus (Klipper)
+
+Adds **regional (area-limited)** bed meshing to the K2/K2 Plus.  
+The grid size **auto-selects 5×5 / 7×7 / 9×9** based on part span.  
+If no bounds are provided, it **falls back to a full mesh**.
+
+---
+
+## Requirements
+
+- Klipper on Creality **K2 / K2 Plus**
+- Stock “box” macros present (used by your original `START_PRINT`)
+- A basic Klipper `bed_mesh` setup (the macro calls `BED_MESH_CALIBRATE`)
+- In `printer.custom_macro`, the variables exist:  
+  `default_bed_temp`, `default_extruder_temp`, `g28_ext_temp`
+- (Optional) Filament sensor named exactly `filament_sensor`
+
+---
+
+## 1) Install the file
+
+**Mainsail/Fluidd UI (recommended)**
+
+1. Open **Mainsail/Fluidd → Files → `config/`**.
+2. **Drag & drop** `w12_leveling.cfg` into the `config/` folder.
+
+Include it in printer.cfg:
+
+```bash
+[include w12_leveling.cfg]
+```
+
+## 2) K2-specific settings (required)
+
+Add/verify in printer.cfg:
+
+[virtual_sdcard]  
+path: /mnt/UDISK/printer_data/gcodes  
+forced_leveling: false
+
+[prtouch_v3]  
+regional_prtouch_switch: True
+
+Restart Klipper after saving.
+
+## 3) OrcaSlicer — Start G-code
+
+Pass first-layer bounds to Klipper, then call your existing START_PRINT:
+
+```bash
+; First-layer bounds → Klipper
+SET_PRINT_MIN [first_layer_print_min_x],[first_layer_print_min_y]
+SET_PRINT_MAX [first_layer_print_max_x],[first_layer_print_max_y]
+
+; Your original start macro (expects these parameter names)
+START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer_single]
+Keep the rest of your Start G-code (purge line, etc.) unchanged.
+```
+
+## 4) Insert the regional mesh into your original macros
+
+A) In START_PRINT — add one line after homing/cleaning
+Context (excerpt):
+
+```bash
+[gcode_macro START_PRINT]
+variable_prepare: 0
+gcode:
+  BOX_START_PRINT
+  G90
+  SET_GCODE_OFFSET Z=0
+  {% set g28_extruder_temp = printer.custom_macro.g28_ext_temp %}
+  {% set bed_temp = printer.custom_macro.default_bed_temp %}
+  {% set extruder_temp = printer.custom_macro.default_extruder_temp %}
+  {% set BED_TEMP = params.BED_TEMP|default(60)|float %}
+  {% set EXTRUDER_TEMP = params.EXTRUDER_TEMP|default(220)|float %}
+  {% set EXTRUDER_WAITTEMP = (140.0|float)|int %}
+  {% if printer['gcode_macro START_PRINT'].prepare|int == 0 %}
+    M106 S0
+    M140 S{params.BED_TEMP}
+    M104 S{EXTRUDER_WAITTEMP}
+    SET_VELOCITY_LIMIT ACCEL=5000 ACCEL_TO_DECEL=5000
+    G28
+    NOZZLE_CLEAR
+    M104 S{EXTRUDER_WAITTEMP}
+    M190 S{params.BED_TEMP}
+    M109 S{EXTRUDER_WAITTEMP}
+    BOX_NOZZLE_CLEAN#M1501
+    NEXT_HOMEZ_NACCU
+    G28 Z
+    ; —— insert here ——
+Add this single line at the marker:
+
+DO_REGIONAL_MESH
+
+
+The key trio becomes:
+
+NEXT_HOMEZ_NACCU
+G28 Z
+DO_REGIONAL_MESH        ; W12 regional mesh runs here
+....
+```
+
+B) G29 — pass PROBE_COUNT correctly and call regional mesh
+Build get_count (supports 7x7 or 7,7) and call DO_REGIONAL_MESH {get_count}:
+
+```bash
+[gcode_macro G29] ; bed leveling
+gcode:
+  {% if params.PROBE_COUNT is defined %}
+    {% set pc = (params.PROBE_COUNT|string).lower().replace('x', ',') %}
+    {% set get_count = 'PROBE_COUNT=' ~ pc %}
+  {% else %}
+    {% set get_count = '' %}
+  {% endif %}
+
+  {% set bed_temp = printer.custom_macro.default_bed_temp %}
+  {% set extruder_temp = printer.custom_macro.g28_ext_temp %}
+  {% set nozzle_clear_temp = printer.custom_macro.default_extruder_temp %}
+
+  {% if params.BED_TEMP is defined and params.BED_TEMP|int >= printer.custom_macro.default_bed_temp %}
+    {% set bed_temp = params.BED_TEMP %}
+  {% endif %}
+  {% if params.EXTRUDER_TEMP is defined %}
+    {% set nozzle_clear_temp = params.EXTRUDER_TEMP %}
+  {% endif %}
+
+  {% set enabled = printer["filament_switch_sensor filament_sensor"].enabled %}
+  {% if enabled %}
+    SET_FILAMENT_SENSOR SENSOR=filament_sensor ENABLE=0
+  {% endif %}
+
+  M104 S{extruder_temp}
+  M140 S{bed_temp}
+  {% if "xy" not in printer.toolhead.homed_axes %}
+    G28 X Y
+  {% endif %}
+
+  SET_G29_FLAG VALUE=1
+  G28 Z
+  BED_MESH_CLEAR
+  NOZZLE_CLEAR
+  M104 S{extruder_temp}
+  M190 S{bed_temp}
+  M109 S{extruder_temp}
+  ZDOWN_SWITCH ENABLE=1
+  G28 Z
+  BED_MESH_CLEAR
+  Z_TILT_ADJUST WAITTIME=5
+  NEXT_HOMEZ_NACCU
+  G28 Z
+  SET_G29_FLAG VALUE=0
+
+  M204 S5000
+  SET_VELOCITY_LIMIT ACCEL_TO_DECEL=5000
+
+  DO_REGIONAL_MESH {get_count}    ; ← regional mesh instead of full mesh
+
+  G1 Z175 F1200
+  BOX_MOVE_TO_SAFE_POS#M1499
+  CXSAVE_CONFIG
+  TURN_OFF_HEATERS
+
+  {% if enabled %}
+    SET_FILAMENT_SENSOR SENSOR=filament_sensor ENABLE=1
+  {% endif %}
+```
+
+If you want heaters to stay on after G29, guard TURN_OFF_HEATERS behind a flag (e.g., KEEP_HEATERS=1).
+
+## 5) Quick test
+
+Start a print and check the Klipper console. You should see:
+
+```bash
+Regional mesh: MIN=(...), MAX=(...), span=... mm -> PROBE_COUNT=...
+```
+
+The probe points should cover only the printed area.
