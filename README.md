@@ -178,3 +178,5 @@ Regional mesh: MIN=(...), MAX=(...), span=... mm -> PROBE_COUNT=...
 ```
 
 The probe points should cover only the printed area.
+
+Public Domain — [The Unlicense](https://unlicense.org).
