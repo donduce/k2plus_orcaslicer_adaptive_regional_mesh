@@ -49,8 +49,8 @@ Pass first-layer bounds to Klipper, then call your existing START_PRINT:
 
 ```bash
 ; First-layer bounds → Klipper
-SET_PRINT_MIN [first_layer_print_min_x],[first_layer_print_min_y]
-SET_PRINT_MAX [first_layer_print_max_x],[first_layer_print_max_y]
+SET_PRINT_MIN X={first_layer_print_min[0]} Y={first_layer_print_min[1]}
+SET_PRINT_MAX X={first_layer_print_max[0]} Y={first_layer_print_max[1]}
 
 ; Your original start macro (expects these parameter names)
 START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer_single]
