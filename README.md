@@ -28,6 +28,17 @@ Include it in printer.cfg:
 
 ```bash
 [include w12_leveling.cfg]
+
+
+{"code":"key60", "msg":"Internal error on command:BED_MESH_CALIBRATE", "values": ["BED_MESH_CALIBRATE"]}
+Fix in printer.cfg, comment out the original probe_count and set it to 5,5
+
+[bed_mesh]
+speed: 100
+mesh_min: 5,5
+mesh_max: 345,345
+# probe_count: 9,9    ; original -> COMMENT THIS OUT
+probe_count: 5,5       ; NEW VALUE
 ```
 
 ## 2) K2-specific settings (required)
