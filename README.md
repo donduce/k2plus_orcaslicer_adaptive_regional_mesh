@@ -11,8 +11,6 @@ If no bounds are provided, it **falls back to a full mesh**.
 - Klipper on Creality **K2 / K2 Plus**
 - Stock “box” macros present (used by your original `START_PRINT`)
 - A basic Klipper `bed_mesh` setup (the macro calls `BED_MESH_CALIBRATE`)
-- In `printer.custom_macro`, the variables exist:  
-  `default_bed_temp`, `default_extruder_temp`, `g28_ext_temp`
 - (Optional) Filament sensor named exactly `filament_sensor`
 
 ---
